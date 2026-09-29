@@ -3,10 +3,10 @@ import type { TunnelFace } from '../types/face';
 import type { JointSet } from '../types/joint';
 import type { RockMassGrade } from '../types/grade';
 import type { WaterInflow } from '../types/water';
-import { newId } from './id';
+import { newId, newUuid } from './id';
 
 export const DB_NAME = 'gbtunnelface';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const LS_VERSION_KEY = 'gbtunnelface:db-version';
 
 class TunnelFaceDB extends Dexie {
@@ -50,6 +50,50 @@ class TunnelFaceDB extends Dexie {
           .toCollection()
           .modify((row: any) => {
             if (row.chainage === undefined) row.chainage = 0;
+          });
+      });
+    // v3：引入跨机器交接能力。每张表补稳定标识 uuid 与修订时间 updatedAt。
+    // 旧版 v2 数据没有修订时间，导入前先补齐基线（掌子面=编录时间、级别=判定时间、
+    // 涌水=量测时间、节理=所属掌子面编录时间，缺失则 0），再参与冲突判断。
+    this.version(3)
+      .stores({
+        faces: 'id, uuid, faceNo, chainage, lithology, excavationMethod, weathering, recordedAt, updatedAt',
+        joints: 'id, uuid, faceId, setNo, dipDirection, dipAngle, fillMaterial, updatedAt',
+        grades: 'id, uuid, faceId, grade, judgedAt, bqValue, updatedAt',
+        waters: 'id, uuid, faceId, chainage, type, changeTrend, updatedAt',
+      })
+      .upgrade(async (tx) => {
+        const faceRows = await tx.table('faces').toArray();
+        const faceRecordedAt = new Map<string, number>(
+          faceRows.map((f: any) => [f.id, typeof f.recordedAt === 'number' ? f.recordedAt : 0]),
+        );
+        await tx
+          .table('faces')
+          .toCollection()
+          .modify((row: any) => {
+            if (!row.uuid) row.uuid = newUuid();
+            if (row.updatedAt === undefined) row.updatedAt = typeof row.recordedAt === 'number' ? row.recordedAt : Date.now();
+          });
+        await tx
+          .table('joints')
+          .toCollection()
+          .modify((row: any) => {
+            if (!row.uuid) row.uuid = newUuid();
+            if (row.updatedAt === undefined) row.updatedAt = faceRecordedAt.get(row.faceId) ?? 0;
+          });
+        await tx
+          .table('grades')
+          .toCollection()
+          .modify((row: any) => {
+            if (!row.uuid) row.uuid = newUuid();
+            if (row.updatedAt === undefined) row.updatedAt = typeof row.judgedAt === 'number' ? row.judgedAt : Date.now();
+          });
+        await tx
+          .table('waters')
+          .toCollection()
+          .modify((row: any) => {
+            if (!row.uuid) row.uuid = newUuid();
+            if (row.updatedAt === undefined) row.updatedAt = typeof row.measuredAt === 'number' ? row.measuredAt : 0;
           });
       });
   }
@@ -97,6 +141,7 @@ export async function ensureSeedData(): Promise<void> {
   const faces: TunnelFace[] = [
     {
       id: face1,
+      uuid: newUuid(),
       faceNo: 'ZK-102',
       chainage: 12480,
       mileageRange: [12480, 12483],
@@ -107,10 +152,12 @@ export async function ensureSeedData(): Promise<void> {
       rockStrength: 62,
       attitude: { strike: 42, dipDirection: 132, dipAngle: 34 },
       recordedAt: now - 2 * day,
+      updatedAt: now - 2 * day,
       geologist: '岑柏川',
     },
     {
       id: face2,
+      uuid: newUuid(),
       faceNo: 'ZK-103',
       chainage: 12483,
       mileageRange: [12483, 12486],
@@ -121,6 +168,7 @@ export async function ensureSeedData(): Promise<void> {
       rockStrength: 18,
       attitude: { strike: 48, dipDirection: 138, dipAngle: 28 },
       recordedAt: now - 6 * hour,
+      updatedAt: now - 6 * hour,
       geologist: '岑柏川',
     },
   ];
@@ -128,6 +176,7 @@ export async function ensureSeedData(): Promise<void> {
   const joints: JointSet[] = [
     {
       id: newId('joint'),
+      uuid: newUuid(),
       faceId: face1,
       setNo: 1,
       dipDirection: 128,
@@ -139,9 +188,11 @@ export async function ensureSeedData(): Promise<void> {
       roughness: '粗糙',
       waterWet: '潮湿',
       jointCount: 9,
+      updatedAt: now - 2 * day,
     },
     {
       id: newId('joint'),
+      uuid: newUuid(),
       faceId: face1,
       setNo: 2,
       dipDirection: 216,
@@ -153,9 +204,11 @@ export async function ensureSeedData(): Promise<void> {
       roughness: '平整',
       waterWet: '滴水',
       jointCount: 5,
+      updatedAt: now - 2 * day,
     },
     {
       id: newId('joint'),
+      uuid: newUuid(),
       faceId: face1,
       setNo: 3,
       dipDirection: 312,
@@ -167,9 +220,11 @@ export async function ensureSeedData(): Promise<void> {
       roughness: '起伏粗糙',
       waterWet: '干燥',
       jointCount: 12,
+      updatedAt: now - 2 * day,
     },
     {
       id: newId('joint'),
+      uuid: newUuid(),
       faceId: face2,
       setNo: 1,
       dipDirection: 140,
@@ -181,12 +236,14 @@ export async function ensureSeedData(): Promise<void> {
       roughness: '平直光滑',
       waterWet: '线流',
       jointCount: 4,
+      updatedAt: now - 6 * hour,
     },
   ];
 
   const grades: RockMassGrade[] = [
     {
       id: newId('grade'),
+      uuid: newUuid(),
       faceId: face1,
       grade: 'Ⅲ',
       bqValue: 358,
@@ -200,12 +257,14 @@ export async function ensureSeedData(): Promise<void> {
       supportSuggestion: '系统锚杆（φ25，L=3.0 m，间距 1.0 m）+ 喷射混凝土 12 cm + 钢筋网',
       manualAdjusted: false,
       judgedAt: now - 2 * day,
+      updatedAt: now - 2 * day,
     },
   ];
 
   const waters: WaterInflow[] = [
     {
       id: newId('water'),
+      uuid: newUuid(),
       faceId: face1,
       position: '拱顶右侧 3 m',
       type: '滴水',
@@ -215,9 +274,11 @@ export async function ensureSeedData(): Promise<void> {
       changeTrend: '稳定',
       measuredAt: now - 2 * day,
       chainage: 12478,
+      updatedAt: now - 2 * day,
     },
     {
       id: newId('water'),
+      uuid: newUuid(),
       faceId: face1,
       position: '拱腰右侧',
       type: '线流',
@@ -227,9 +288,11 @@ export async function ensureSeedData(): Promise<void> {
       changeTrend: '增大',
       measuredAt: now - day,
       chainage: 12481,
+      updatedAt: now - day,
     },
     {
       id: newId('water'),
+      uuid: newUuid(),
       faceId: face1,
       position: '拱脚左侧',
       type: '股状',
@@ -239,6 +302,7 @@ export async function ensureSeedData(): Promise<void> {
       changeTrend: '突增',
       measuredAt: now - 4 * hour,
       chainage: 12484,
+      updatedAt: now - 4 * hour,
     },
   ];
 

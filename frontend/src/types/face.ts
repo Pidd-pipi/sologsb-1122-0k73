@@ -23,6 +23,8 @@ export interface Attitude {
 /** 隧道掌子面编录档案 */
 export interface TunnelFace {
   id: string;
+  /** 稳定标识（跨机器交接用；本机 ID 不作为身份依据） */
+  uuid: string;
   /** 掌子面编号 */
   faceNo: string;
   /** 里程桩号（米） */
@@ -38,7 +40,9 @@ export interface TunnelFace {
   rockStrength: number;
   attitude: Attitude;
   recordedAt: number;
+  /** 修订时间（交接冲突时按此取新值） */
+  updatedAt: number;
   geologist: string;
 }
 
-export type TunnelFaceDraft = Omit<TunnelFace, 'id' | 'recordedAt'>;
+export type TunnelFaceDraft = Omit<TunnelFace, 'id' | 'uuid' | 'recordedAt' | 'updatedAt'>;

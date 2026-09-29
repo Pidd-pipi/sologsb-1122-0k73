@@ -11,6 +11,8 @@ export const GROUNDWATERS: Groundwater[] = ['干燥', '潮湿', '点滴状出水
 /** 围岩级别判定记录 */
 export interface RockMassGrade {
   id: string;
+  /** 稳定标识（跨机器交接用） */
+  uuid: string;
   faceId: string;
   grade: RockGrade;
   /** 基本质量指标 BQ */
@@ -33,9 +35,11 @@ export interface RockMassGrade {
   /** 是否人工修正级别 */
   manualAdjusted: boolean;
   judgedAt: number;
+  /** 修订时间（交接冲突时按此取新值） */
+  updatedAt: number;
 }
 
-export type RockMassGradeDraft = Omit<RockMassGrade, 'id' | 'judgedAt'>;
+export type RockMassGradeDraft = Omit<RockMassGrade, 'id' | 'uuid' | 'judgedAt' | 'updatedAt'>;
 
 /** 级别色带（用于 <GradeTag>） */
 export const GRADE_COLOR: Record<RockGrade, string> = {

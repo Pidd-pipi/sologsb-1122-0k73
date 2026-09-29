@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { db, toPlain } from '../utils/db';
-import { newId } from '../utils/id';
+import { newId, newUuid } from '../utils/id';
 import type { JointSet, JointSetDraft } from '../types/joint';
 
 interface JointState {
@@ -22,15 +22,21 @@ export const useJointStore = defineStore('joint', {
       this.loaded = true;
     },
     async add(draft: JointSetDraft) {
-      const record: JointSet = { ...toPlain(draft), id: newId('joint') };
+      const record: JointSet = {
+        ...toPlain(draft),
+        id: newId('joint'),
+        uuid: newUuid(),
+        updatedAt: Date.now(),
+      };
       await db.joints.put(toPlain(record));
       this.items = [...this.items, record];
       return record;
     },
     async update(id: string, patch: Partial<JointSet>) {
+      const now = Date.now();
       const plain = toPlain(patch);
-      await db.joints.update(id, plain);
-      this.items = this.items.map((it) => (it.id === id ? { ...it, ...plain } : it));
+      await db.joints.update(id, { ...plain, updatedAt: now });
+      this.items = this.items.map((it) => (it.id === id ? { ...it, ...plain, updatedAt: now } : it));
     },
     async remove(id: string) {
       await db.joints.delete(id);

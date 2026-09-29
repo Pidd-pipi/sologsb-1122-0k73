@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useFaceStore } from '../stores/faceStore';
 import { useGradeStore } from '../stores/gradeStore';
 import { useJointStore } from '../stores/jointStore';
 import { useFaceFilter } from '../hooks/useFaceFilter';
 import FaceCard from '../components/common/FaceCard.vue';
 import GradeTag from '../components/common/GradeTag.vue';
+import { exportPackage, downloadPackage, importPackage, type CatalogPackage } from '../utils/catalogPackage';
 import {
   EXCAVATION_METHODS,
   LITHOLOGIES,
@@ -27,6 +28,8 @@ const { filters, result, options, gradeDistribution, reset } = useFaceFilter();
 
 const dialogVisible = ref(false);
 const error = ref('');
+const fileInput = ref<HTMLInputElement | null>(null);
+const importing = ref(false);
 
 const form = reactive<TunnelFaceDraft>({
   faceNo: '',
@@ -94,6 +97,58 @@ async function submit() {
   form.faceNo = '';
 }
 
+/** 导出编录包（JSON 文件），用于单机交接 */
+async function onExport() {
+  const pkg = await exportPackage();
+  downloadPackage(pkg);
+  ElMessage.success('编录包已导出，可在另一台机器上导入');
+}
+
+function triggerImport() {
+  fileInput.value?.click();
+}
+
+/** 读取编录包并合并导入；导入后重拉各 store，台账/详情/级别页即看到合并后的同一结果 */
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ''; // 允许重复选择同一文件
+  if (!file) return;
+  let pkg: CatalogPackage;
+  try {
+    const text = await file.text();
+    pkg = JSON.parse(text) as CatalogPackage;
+  } catch {
+    ElMessage.error('导入失败：文件不是合法的 JSON');
+    return;
+  }
+  const counts = `掌子面 ${pkg.faces.length} 个、节理 ${pkg.joints?.length ?? 0} 组、级别判定 ${pkg.grades?.length ?? 0} 条、涌水 ${pkg.waters?.length ?? 0} 条、素描线段 ${Object.values(pkg.sketches ?? {}).reduce((s, arr) => s + arr.length, 0)} 条`;
+  try {
+    await ElMessageBox.confirm(
+      `即将导入编录包（导出时间 ${new Date(pkg.exportedAt).toLocaleString('zh-CN')}，${counts}）。` +
+        `导入将按掌子面编号与里程区间识别同一循环并合并，不会删除已有记录。是否继续？`,
+      '导入编录包',
+      { type: 'warning', confirmButtonText: '确认导入', cancelButtonText: '取消' },
+    );
+  } catch {
+    return; // 用户取消
+  }
+  importing.value = true;
+  try {
+    const stats = await importPackage(pkg);
+    await Promise.all([faceStore.load(), jointStore.load(), gradeStore.load()]);
+    ElMessage.success(
+      `导入完成：新增掌子面 ${stats.facesAdded} / 更新 ${stats.facesUpdated}；` +
+        `节理 +${stats.jointsAdded}、级别 +${stats.gradesAdded}、涌水 +${stats.watersAdded}、` +
+        `素描线段 +${stats.sketchesAdded} 条`,
+    );
+  } catch (err) {
+    ElMessage.error(`导入失败，已保留原库：${(err as Error).message}`);
+  } finally {
+    importing.value = false;
+  }
+}
+
 onMounted(async () => {
   await faceStore.load();
   await gradeStore.load();
@@ -108,7 +163,16 @@ onMounted(async () => {
       <el-tag>共 {{ faceStore.items.length }} 个掌子面</el-tag>
       <el-tag type="info" effect="plain">筛选命中 {{ result.length }} 个</el-tag>
       <div class="spacer" />
+      <el-button :loading="importing" @click="onExport">导出编录包</el-button>
+      <el-button type="success" :loading="importing" @click="triggerImport">导入编录包</el-button>
       <el-button type="primary" @click="openDialog">新建编录</el-button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="application/json,.json"
+        style="display: none"
+        @change="onFileChange"
+      />
     </div>
 
     <el-card shadow="never">

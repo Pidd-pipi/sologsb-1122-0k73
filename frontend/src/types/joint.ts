@@ -16,6 +16,8 @@ export const ROUGHNESSES: Roughness[] = ['平直光滑', '平整', '粗糙', '�
 /** 结构面（节理组） */
 export interface JointSet {
   id: string;
+  /** 稳定标识（跨机器交接用） */
+  uuid: string;
   faceId: string;
   /** 组号 */
   setNo: number;
@@ -34,9 +36,11 @@ export interface JointSet {
   waterWet: WaterWet;
   /** 条数 */
   jointCount: number;
+  /** 修订时间（交接冲突时按此取新值） */
+  updatedAt: number;
 }
 
-export type JointSetDraft = Omit<JointSet, 'id'>;
+export type JointSetDraft = Omit<JointSet, 'id' | 'uuid' | 'updatedAt'>;
 
 /** 倾角是否异常（超出 0~90°） */
 export function isDipAbnormal(dipAngle: number): boolean {

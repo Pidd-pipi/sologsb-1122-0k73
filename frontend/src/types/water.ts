@@ -11,6 +11,8 @@ export const CHANGE_TRENDS: ChangeTrend[] = ['减小', '稳定', '增大', '突�
 /** 涌水记录 */
 export interface WaterInflow {
   id: string;
+  /** 稳定标识（跨机器交接用） */
+  uuid: string;
   faceId: string;
   /** 出水部位 */
   position: string;
@@ -25,9 +27,11 @@ export interface WaterInflow {
   measuredAt: number;
   /** 沿里程位置（米），用于趋势折线 */
   chainage: number;
+  /** 修订时间（交接冲突时按此取新值） */
+  updatedAt: number;
 }
 
-export type WaterInflowDraft = Omit<WaterInflow, 'id' | 'measuredAt'>;
+export type WaterInflowDraft = Omit<WaterInflow, 'id' | 'uuid' | 'measuredAt' | 'updatedAt'>;
 
 /** 是否突变点（趋势突增或涌水量超过阈值） */
 export function isSurge(point: WaterInflow, all: WaterInflow[]): boolean {
