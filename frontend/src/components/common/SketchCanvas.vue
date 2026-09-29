@@ -1,21 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import type { Attitude } from '../../types/face';
-
-export interface SketchSegment {
-  id: string;
-  /** 线中点 x（视图坐标） */
-  x: number;
-  /** 线中点 y（视图坐标） */
-  y: number;
-  /** 结构面倾角 ° */
-  dipAngle: number;
-  /** 结构面倾向 ° */
-  dipDirection: number;
-  /** 线长（视图坐标） */
-  length: number;
-  label: string;
-}
+import { loadSketch, saveSketch, sketchStorageKey, type SketchSegment } from '../../utils/sketch';
 
 const props = defineProps<{
   faceId: string;
@@ -33,7 +19,7 @@ const VB = { w: 660, h: 380 };
 const segments = ref<SketchSegment[]>([]);
 const selectedId = ref('');
 
-const storageKey = computed(() => `gbtunnelface:sketch:${props.faceId}`);
+const storageKey = computed(() => sketchStorageKey(props.faceId));
 
 /** 岩性填充纹样：按岩性选择不同 SVG pattern */
 const patternId = computed(() => {
@@ -57,17 +43,12 @@ const patternLabel = computed(() => {
 });
 
 function load() {
-  try {
-    const raw = window.localStorage.getItem(storageKey.value);
-    segments.value = raw ? (JSON.parse(raw) as SketchSegment[]) : [];
-  } catch {
-    segments.value = [];
-  }
+  segments.value = loadSketch(props.faceId);
 }
 
 function persist() {
   try {
-    window.localStorage.setItem(storageKey.value, JSON.stringify(segments.value));
+    saveSketch(props.faceId, segments.value);
   } catch {
     /* 忽略存储失败 */
   }

@@ -39,6 +39,8 @@ export interface TunnelFace {
   attitude: Attitude;
   recordedAt: number;
   geologist: string;
+  /** 记录修订时间（交接合并时取新值的依据）；旧版 v2 数据缺省，按 recordedAt 补基线 */
+  revisedAt?: number;
 }
 
 export type TunnelFaceDraft = Omit<TunnelFace, 'id' | 'recordedAt'>;

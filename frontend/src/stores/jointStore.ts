@@ -22,13 +22,13 @@ export const useJointStore = defineStore('joint', {
       this.loaded = true;
     },
     async add(draft: JointSetDraft) {
-      const record: JointSet = { ...toPlain(draft), id: newId('joint') };
+      const record: JointSet = { ...toPlain(draft), id: newId('joint'), revisedAt: Date.now() };
       await db.joints.put(toPlain(record));
       this.items = [...this.items, record];
       return record;
     },
     async update(id: string, patch: Partial<JointSet>) {
-      const plain = toPlain(patch);
+      const plain = toPlain({ ...patch, revisedAt: Date.now() });
       await db.joints.update(id, plain);
       this.items = this.items.map((it) => (it.id === id ? { ...it, ...plain } : it));
     },

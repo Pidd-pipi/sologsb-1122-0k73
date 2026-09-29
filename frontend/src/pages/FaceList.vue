@@ -18,6 +18,7 @@ import {
 } from '../types/face';
 import { ROCK_GRADES, type RockGrade } from '../types/grade';
 import { formatChainage } from '../utils/geoMath';
+import { downloadCatalogPackage, importCatalogPackage } from '../utils/catalog';
 
 const router = useRouter();
 const faceStore = useFaceStore();
@@ -27,6 +28,8 @@ const { filters, result, options, gradeDistribution, reset } = useFaceFilter();
 
 const dialogVisible = ref(false);
 const error = ref('');
+const fileInput = ref<HTMLInputElement | null>(null);
+const importing = ref(false);
 
 const form = reactive<TunnelFaceDraft>({
   faceNo: '',
@@ -94,6 +97,39 @@ async function submit() {
   form.faceNo = '';
 }
 
+/** 导出整本机编录包（掌子面/节理/涌水/级别/素描线段） */
+async function exportPackage() {
+  try {
+    await downloadCatalogPackage();
+    ElMessage.success('已导出编录包，可交给另一台机器导入');
+  } catch (e) {
+    ElMessage.error(`导出失败：${(e as Error).message}`);
+  }
+}
+
+function pickImportFile() {
+  fileInput.value?.click();
+}
+
+async function onPackageFileChosen(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ''; // 允许再次选择同一文件
+  if (!file) return;
+  importing.value = true;
+  try {
+    const raw = await file.text();
+    const outcome = await importCatalogPackage(raw);
+    // 重新加载全部 store，台账/详情/级别页看到同一份合并结果
+    await Promise.all([faceStore.load(), jointStore.load(), gradeStore.load()]);
+    ElMessage.success(`编录包已合并：${outcome.summary}`);
+  } catch (e) {
+    ElMessage.error((e as Error).message || '编录包导入失败，原库未改动');
+  } finally {
+    importing.value = false;
+  }
+}
+
 onMounted(async () => {
   await faceStore.load();
   await gradeStore.load();
@@ -108,7 +144,16 @@ onMounted(async () => {
       <el-tag>共 {{ faceStore.items.length }} 个掌子面</el-tag>
       <el-tag type="info" effect="plain">筛选命中 {{ result.length }} 个</el-tag>
       <div class="spacer" />
+      <el-button :loading="importing" @click="pickImportFile">导入编录包</el-button>
+      <el-button @click="exportPackage">导出编录包</el-button>
       <el-button type="primary" @click="openDialog">新建编录</el-button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="application/json,.json"
+        style="display: none"
+        @change="onPackageFileChosen"
+      />
     </div>
 
     <el-card shadow="never">

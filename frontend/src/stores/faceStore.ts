@@ -23,13 +23,14 @@ export const useFaceStore = defineStore('face', {
       this.loaded = true;
     },
     async add(draft: TunnelFaceDraft) {
-      const record: TunnelFace = { ...toPlain(draft), id: newId('face'), recordedAt: Date.now() };
+      const now = Date.now();
+      const record: TunnelFace = { ...toPlain(draft), id: newId('face'), recordedAt: now, revisedAt: now };
       await db.faces.put(toPlain(record));
       this.items = [...this.items, record].sort((a, b) => b.chainage - a.chainage);
       return record;
     },
     async update(id: string, patch: Partial<TunnelFace>) {
-      const plain = toPlain(patch);
+      const plain = toPlain({ ...patch, revisedAt: Date.now() });
       await db.faces.update(id, plain);
       this.items = this.items.map((it) => (it.id === id ? { ...it, ...plain } : it));
     },

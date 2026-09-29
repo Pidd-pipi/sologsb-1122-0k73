@@ -1,6 +1,9 @@
-/** 生成本地唯一 id */
+let seq = 0;
+
+/** 生成本地唯一 id（时间戳 + 自增序列 + 随机串，避免同一毫秒内连撞） */
 export function newId(prefix = 'id'): string {
-  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  seq = (seq + 1) % 0xffffff;
+  return `${prefix}_${Date.now().toString(36)}${seq.toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /** 下一个组号 */

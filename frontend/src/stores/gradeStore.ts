@@ -29,13 +29,15 @@ export const useGradeStore = defineStore('grade', {
       this.loaded = true;
     },
     async addGrade(draft: RockMassGradeDraft) {
-      const record: RockMassGrade = { ...toPlain(draft), id: newId('grade'), judgedAt: Date.now() };
+      const now = Date.now();
+      const record: RockMassGrade = { ...toPlain(draft), id: newId('grade'), judgedAt: now, revisedAt: now };
       await db.grades.put(toPlain(record));
       this.items = [record, ...this.items];
       return record;
     },
     async addWater(draft: WaterInflowDraft) {
-      const record: WaterInflow = { ...toPlain(draft), id: newId('water'), measuredAt: Date.now() };
+      const now = Date.now();
+      const record: WaterInflow = { ...toPlain(draft), id: newId('water'), measuredAt: now, revisedAt: now };
       await db.waters.put(toPlain(record));
       this.waters = [...this.waters, record].sort((a, b) => a.chainage - b.chainage);
       return record;

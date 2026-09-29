@@ -25,6 +25,8 @@ export interface WaterInflow {
   measuredAt: number;
   /** 沿里程位置（米），用于趋势折线 */
   chainage: number;
+  /** 记录修订时间（交接合并时取新值的依据）；旧版 v2 数据缺省，按 measuredAt 补基线 */
+  revisedAt?: number;
 }
 
 export type WaterInflowDraft = Omit<WaterInflow, 'id' | 'measuredAt'>;

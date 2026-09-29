@@ -63,8 +63,10 @@ sologsb-1122/
         ├── components/common/{SketchCanvas,JointPolarPlot,GradeTag,FaceCard}.vue
         ├── hooks/{useFaceFilter,useGradeCalc}.ts
         ├── pages/{FaceList,FaceDetail,JointEntry,WaterView,GradeJudge}.vue
-        └── utils/{db,geoMath,id}.ts
+        └── utils/{db,geoMath,id,sketch,transfer,catalog}.ts
 ```
+
+`utils/transfer.ts` 是编录包的纯合并算法（身份键、修订基线、冲突裁决），`utils/catalog.ts` 负责 IndexedDB/localStorage 读写与文件下载，`utils/sketch.ts` 收敛素描线段类型与存储键。`scripts/selftest-*.mjs` 是不依赖浏览器的合并算法/I/O 自检（`node scripts/selftest-transfer.mjs`、`node scripts/selftest-catalog.mjs`）。
 
 ## 页面与路由
 
@@ -83,7 +85,8 @@ sologsb-1122/
 - 数据库名 `gbtunnelface`，当前结构版本 **v2**（`localStorage['gbtunnelface:db-version']` 记录）。
 - 四张表：`faces`（掌子面）、`joints`（节理组）、`grades`（围岩级别判定）、`waters`（涌水记录）。
 - v1 → v2 迁移：为老掌子面补 `attitude`、`mileageRange`，为级别记录补 `correctedBq`、`manualAdjusted`，为涌水补 `chainage`，并新增索引。
-- 岩性素描的结构面线段单独存 `localStorage['gbtunnelface:sketch:<faceId>']`，刷新后仍在。
+- 岩性素描的结构面线段单独存 `localStorage['gbtunnelface:sketch:<faceId>']`，刷新后仍在；导出编录包时随掌子面一起打包，导入后按合并出的本地掌子面 id 归位到同一键。
+- 各记录的 `revisedAt`（修订时间）用于编录包合并取新值；旧数据缺省该字段时按业务时间补基线，不需要结构升级，数据库结构版本仍为 v2。
 - 容器无状态、不挂载命名卷；清空站点数据即回到初始示范数据。
 - 首次打开灌入 2 个示范掌子面、4 组节理、1 条级别判定与 3 条涌水记录。
 
@@ -94,3 +97,19 @@ sologsb-1122/
 - **素描交互**：`<SketchCanvas>` 在图上单击即按当前岩层产状布置结构面线段，带岩性填充纹样、比例尺、图例与撤销/清空，线段本地持久化。
 - **节理统计**：`<JointPolarPlot>` 等面积投影极点图 + 走向玫瑰图，按组着色；按倾向 30° 聚类支持同组产状合并。
 - **异常提示**：倾角超出 0~90° 直接拦截；涌水量较上一点翻倍或趋势突增标记为突变点并给出措施。
+- **编录交接（导出/导入编录包）**：台账页「导出编录包 / 导入编录包」在两台单机之间交接。包内同时带掌子面、节理、涌水、级别判定与素描线段；导入按业务身份合并，整包原子提交。
+
+## 编录包导出 / 导入
+
+- **包格式**：JSON 文件（`gbtunnelface-catalog-<时间>.json`），字段 `packageType=gbtunnelface-catalog`、`format=1`，含 `faces / joints / grades / waters / sketches` 五部分；素描线段随所属掌子面打包。
+- **身份不看本机 id**：本机 `id` 只是 IndexedDB 主键。合并按业务身份识别同一循环——
+  - 掌子面：**编号 + 编录里程区间**；
+  - 节理组：所属掌子面身份 + 组号；
+  - 级别判定：所属掌子面身份 + 判定时间；
+  - 涌水记录：所属掌子面身份 + 测量时间 + 部位 + 流量/类型；
+  - 素描线段：所属掌子面身份 + 位置/产状/线长指纹。
+- **按修订时间取新值**：四类记录各自带 `revisedAt`，**逐表独立合并**。两边都改过同一条记录时取 `revisedAt` 新的一方；因此较新的掌子面记录不会连带覆盖本地更新过的级别或涌水记录（平局保留本地）。
+- **旧版 v2 数据基线**：v2 记录没有 `revisedAt`，导入时先补基线再判冲突——掌子面取 `recordedAt`、级别取 `judgedAt`、涌水取 `measuredAt`，节理（无业务时间）取 0。
+- **整包原子性**：解析、校验、合并全部在内存中完成后才写库；四张表在单个 IndexedDB 事务内整体提交，素描键（localStorage）先落、事务失败即回滚。任一步失败都保留原库。
+- **幂等**：同一包重复导入（或导回本机电）结果不变，不产生掌子面副本、重复级别/涌水记录或重复素描线段。
+- 合并后台账、详情、级别/涌水页统一重新加载，看到的是同一份合并结果。
